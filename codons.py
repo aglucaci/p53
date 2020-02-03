@@ -22,13 +22,14 @@ The idea for this is that:
 # =============================================================================
 from Bio import SeqIO
 from Bio.Alphabet import generic_rna
+import sys
 
 # =============================================================================
 # Declares
 # =============================================================================
-PROTEIN = "TP53_refseq_protein.fasta"
-TRANSCRIPTS = "TP53_refseq_transcript.fasta"
-OUTPUT = "TP53_refseq_CODONS.fasta"
+PROTEIN = "human_protein_sequences.fasta"
+TRANSCRIPTS = "human_kinase_cDNA.fasta"
+OUTPUT = "human_kinase_cDNA_codons.fasta"
 
 
 # =============================================================================
@@ -38,32 +39,29 @@ OUTPUT = "TP53_refseq_CODONS.fasta"
 
 def Process(PROTEIN_DESC, PROTEIN_SEQ, TRANSCRIPT_DESC, TRANSCRIPT_SEQ):
     #print([PROTEIN_DESC], [TRANSCRIPT_DESC])
-    print("Protein seq length (AA):", len(PROTEIN_SEQ))
-    print(PROTEIN_DESC, PROTEIN_SEQ)
     
-    
-    TRIMMED_TRANSCRIPT_SEQ = ""
-    print()
+    # print()
+    #print(PROTEIN_DESC, "\nProtein seq length (AA):", len(PROTEIN_SEQ))
+    # print(PROTEIN_DESC, PROTEIN_SEQ)
+    #print()
     
     #Loop over TRANSCRIPT_SEQ
     start = 0
     NT_SEQ_LENGTH = len(PROTEIN_SEQ) * 3
     while start < len(str(TRANSCRIPT_SEQ)):
         
-        coding_dna = TRANSCRIPT_SEQ[start: start + NT_SEQ_LENGTH].translate()
-        
-        
+        coding_dna = TRANSCRIPT_SEQ[start: start + NT_SEQ_LENGTH].translate() #translated
         #if start == 202:
         #    print(start, coding_dna, "\n", len(coding_dna))
-        
+        print(coding_dna)
         if coding_dna == str(PROTEIN_SEQ):
-            print("\n#### FOUND", coding_dna)
+            #print("\n#### FOUND", coding_dna)
             #print("#### CODONS", TRANSCRIPT_SEQ[start: start + NT_SEQ_LENGTH + 3]) # has stop codon
-            print("\n#### CODONS", TRANSCRIPT_SEQ[start: start + NT_SEQ_LENGTH]) # NO stop codon
+            #print("\n#### CODONS", TRANSCRIPT_SEQ[start: start + NT_SEQ_LENGTH]) # NO stop codon
             break
         
         start += 1
-        if start == 301: break
+        #if start == 301: break
         #end if
     #end while
     
@@ -72,7 +70,14 @@ def Process(PROTEIN_DESC, PROTEIN_SEQ, TRANSCRIPT_DESC, TRANSCRIPT_SEQ):
 # =============================================================================
 # Main subroutine.
 # =============================================================================
+def progressBar(value, endvalue, bar_length=10):
 
+    percent = float(value) / endvalue
+    arrow = '-' * int(round(percent * bar_length)-1) + '>'
+    spaces = ' ' * (bar_length - len(arrow))
+
+    sys.stdout.write("\rPercent: [{0}] {1}%".format(arrow + spaces, int(round(percent * 100))))
+    sys.stdout.flush()
 
 
 def main(): # Really to verify things.
@@ -87,24 +92,25 @@ def main(): # Really to verify things.
     with open(TRANSCRIPTS, "r") as handle:
         #x = SeqIO.parse(handle, "fasta")
         #print(len(x))
-        count = 0 
+        trans_count = 0 
         for record in SeqIO.parse(handle, "fasta"):
-            count +=1
+            trans_count +=1
             transcript_list.append(record.description)
-        print("\tTranscripts:", count)    
+        print("\tTranscripts:", trans_count)    
     handle.close()
     
     with open(PROTEIN, "r") as handle:
         #x = SeqIO.parse(handle, "fasta")
         #print(len(x))
-        count = 0 
+        prot_count = 0 
         for record in SeqIO.parse(handle, "fasta"):
-            count +=1
+            prot_count +=1
             protein_list.append(record.description)
-        print("\tProteins:", count)
+        print("\tProteins:", prot_count)
     handle.close()
     
-    
+    #assert(trans_count == prot_count, "Counts do not match") # Check to make sure we have the same number of proteins and transcripts
+    return trans_count, prot_count
     #for n, item in enumerate(transcript_list):
     #    print(item, [protein_list[n]])
     
@@ -114,20 +120,32 @@ def main(): # Really to verify things.
 #Verify files exist
 print("# =============================================================================")
 print("# Processing... ")
-main()
+trans_count, prot_count = main()
 print("# =============================================================================")
 #Looks like species all match up in transcript and protein fasta.
 #This is exceptional, will need to look for species name (from protein desc.) in transcript desc.
 
+# DEBUG
+# sys.exit(1)
+      
+# Create empty output file.
 with open(OUTPUT, "w") as fh:
     fh.write("")
 fh.close()
 
+
+# Main program
+successful_count = 0 
+
 with open(PROTEIN, "r") as prot_handle:
     for n, record in enumerate(SeqIO.parse(prot_handle, "fasta")):
+        
         #if n == 1: break
-        print("\n" + str(n))
-        protein_id = record.id
+        
+        #print("\n" + str(n))
+        
+        # Grab protein data.
+        protein_id = record.id 
         protein_desc = record.description
         protein_seq = record.seq
         
@@ -135,6 +153,9 @@ with open(PROTEIN, "r") as prot_handle:
         with open(TRANSCRIPTS, "r") as transcript_handle:
             for m, transcript_record in enumerate(SeqIO.parse(transcript_handle, "fasta")):
                 if m == n:
+                    progressBar(n, trans_count)
+                    
+                    # Grab Transcript Data
                     transcript_id = transcript_record.id
                     transcript_desc = transcript_record.description
                     transcript_seq = transcript_record.seq
@@ -143,9 +164,18 @@ with open(PROTEIN, "r") as prot_handle:
         transcript_handle.close()
         #end inner with
         
+        # Process
+        #assert(str(protein_desc) == str(transcript_desc), "Does not match")
+        #print(protein_desc, [transcript_desc])
+        codons = ""
         
-        #Process
         codons = Process(protein_desc, protein_seq, transcript_desc, transcript_seq)
+        
+        
+        assert(len(codons) > 0), "EMPTY CODONS: " + protein_desc
+        if transcript_desc == "TRKA_Hsap (TK/Trk)":
+            print(codons, [codons], len(codons))
+        successful_count += 1
         
         #Print out transcript desc and TRIMMED codons transcript.
         with open(OUTPUT, "a") as fh:
@@ -158,17 +188,7 @@ prot_handle.close()
 
 #end outer with
 
-
-
-                    
-                
-                
-                
-                
-                
-                
-        
-
+print("\nFound:", successful_count)
 
 # =============================================================================
 # End of file    
